@@ -1,0 +1,24 @@
+{
+  "name": "homebridge-griffin-home-connect",
+  "displayName": "Griffin Homebridge Home Connect",
+  "version": "1.0.0",
+  "description": "Homebridge plugin for Home Connect (Bosch/Siemens) oven integration.",
+  "license": "Apache-2.0",
+  "author": "Zak Griffin",
+  "keywords": ["homebridge-plugin"],
+  "main": "dist/index.js",
+  "engines": {
+    "homebridge": "^2.0.0",
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "rm -rf ./dist && tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.14.6",
+    "homebridge": "^2.0.0",
+    "typescript": "^5.4.5"
+  }
+}

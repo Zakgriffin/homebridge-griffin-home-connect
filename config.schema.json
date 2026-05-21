@@ -1,0 +1,28 @@
+{
+  "pluginAlias": "GriffinHomeConnect",
+  "pluginType": "platform",
+  "singular": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Griffin Home Connect",
+        "required": true
+      },
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "description": "OAuth client ID from the Home Connect Developer Portal (developer.home-connect.com)",
+        "required": true
+      },
+      "pollIntervalSeconds": {
+        "title": "Poll Interval (seconds)",
+        "type": "integer",
+        "default": 30,
+        "minimum": 10
+      }
+    }
+  }
+}
