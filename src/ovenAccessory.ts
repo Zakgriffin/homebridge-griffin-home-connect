@@ -33,6 +33,7 @@ export function beginOvenAccessory(accessory: PlatformAccessory, appliance: HCAp
   let lastProgramKey = "";
   let stagedSetpoint: number | undefined;
   let isRestarting = false;
+  const programConstraintsMap = new Map<string, { min: number; max: number }>();
 
   type InputEntry = { service: InstanceType<typeof Service.InputSource>; programKey: string; identifier: number };
   const inputEntries: InputEntry[] = [];
@@ -91,8 +92,13 @@ export function beginOvenAccessory(accessory: PlatformAccessory, appliance: HCAp
   thermoService
     .getCharacteristic(Characteristic.TargetTemperature)
     .onGet(() => setpointTemp)
-    .onSet(async (value) => {
-      stagedSetpoint = value as number;
+    .onSet((value) => {
+      const programKey = currentProgramKey || lastProgramKey;
+      const constraints = programConstraintsMap.get(programKey);
+      const raw = value as number;
+      const clamped = constraints ? Math.max(constraints.min, Math.min(constraints.max, raw)) : raw;
+      stagedSetpoint = clamped;
+      if (clamped !== raw) thermoService.updateCharacteristic(Characteristic.TargetTemperature, clamped);
       scheduleSetpointCommand();
     });
 
@@ -204,11 +210,14 @@ export function beginOvenAccessory(accessory: PlatformAccessory, appliance: HCAp
     let tempMin = 30;
     let tempMax = 300;
     let tempStep = 5;
-    for (const options of allOptions) {
+    for (const [i, options] of allOptions.entries()) {
       const c = options.find(o => o.key === SETPOINT_TEMP_KEY)?.constraints;
       if (c?.min !== undefined) tempMin = Math.min(tempMin, c.min);
       if (c?.max !== undefined) tempMax = Math.max(tempMax, c.max);
       if (c?.stepsize !== undefined) tempStep = Math.min(tempStep, c.stepsize);
+      if (c?.min !== undefined && c?.max !== undefined) {
+        programConstraintsMap.set(programs[i].key, { min: c.min, max: c.max });
+      }
     }
     thermoService.getCharacteristic(Characteristic.CurrentTemperature).setProps({ minValue: 0, maxValue: tempMax, minStep: 1 });
     thermoService.getCharacteristic(Characteristic.TargetTemperature).setProps({ minValue: tempMin, maxValue: tempMax, minStep: tempStep });
