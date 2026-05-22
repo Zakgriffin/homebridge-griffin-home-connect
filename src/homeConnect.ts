@@ -34,17 +34,19 @@ export interface HCOptionConstraints {
 
 export interface HCProgramOption {
   key: string;
+  unit?: string;
   constraints?: HCOptionConstraints;
 }
 
 export interface HCStatusEntry {
   key: string;
   value: unknown;
+  unit?: string;
 }
 
 export interface HCActiveProgram {
   key: string;
-  options: Array<{ key: string; value: unknown }>;
+  options: Array<{ key: string; value: unknown; unit?: string }>;
 }
 
 type SimpleLogger = { info: (s: string) => void; error: (s: string) => void };
@@ -109,11 +111,13 @@ export class HomeConnect {
         }),
       });
 
-      const tokenData = await tokenRes.json() as {
-        access_token?: string;
-        refresh_token?: string;
-        error?: string;
-      };
+      const tokenText = await tokenRes.text();
+      let tokenData: { access_token?: string; refresh_token?: string; error?: string };
+      try {
+        tokenData = JSON.parse(tokenText);
+      } catch {
+        throw new Error(`Token endpoint returned non-JSON (${tokenRes.status}): ${tokenText}`);
+      }
 
       if (tokenData.access_token) {
         this.tokenData = {
@@ -184,7 +188,7 @@ export class HomeConnect {
     const res = await this.withAuth(() =>
       fetch(`${API_URL}/homeappliances`, { headers: this.authHeader }),
     );
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error(`getAppliances failed (${res.status}): ${await res.text()}`);
     const data = await res.json() as { data: { homeappliances: HCAppliance[] } };
     return data.data.homeappliances ?? [];
   }
@@ -216,26 +220,30 @@ export class HomeConnect {
     return data.data ?? null;
   }
 
-  async startProgram(haId: string, programKey: string, setpointCelsius?: number): Promise<void> {
-    const options = setpointCelsius !== undefined
-      ? [{ key: SETPOINT_TEMP_KEY, value: setpointCelsius, unit: "°C" }]
-      : [];
-    await this.withAuth(() =>
+  async startProgram(haId: string, programKey: string, setpoint?: number, unit = "°C", durationSeconds?: number): Promise<void> {
+    const options: Array<{ key: string; value: number | string; unit?: string }> = [];
+    if (setpoint !== undefined) options.push({ key: SETPOINT_TEMP_KEY, value: setpoint, unit });
+    if (durationSeconds !== undefined) options.push({ key: "BSH.Common.Option.Duration", value: durationSeconds });
+    const body = { data: { key: programKey, options } };
+    console.log(`[HomeConnect] startProgram ${haId} body: ${JSON.stringify(body)}`);
+    const res = await this.withAuth(() =>
       fetch(`${API_URL}/homeappliances/${haId}/programs/active`, {
         method: "PUT",
         headers: { ...this.authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({ data: { key: programKey, options } }),
+        body: JSON.stringify(body),
       }),
     );
+    if (!res.ok) throw new Error(`startProgram failed (${res.status}): ${await res.text()}`);
   }
 
   async stopProgram(haId: string): Promise<void> {
-    await this.withAuth(() =>
+    const res = await this.withAuth(() =>
       fetch(`${API_URL}/homeappliances/${haId}/programs/active`, {
         method: "DELETE",
         headers: this.authHeader,
       }),
     );
+    if (!res.ok && res.status !== 409) throw new Error(`stopProgram failed (${res.status}): ${await res.text()}`);
   }
 
   async getProgramDetail(haId: string, programKey: string): Promise<HCProgramOption[]> {
