@@ -1,7 +1,7 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig } from "homebridge";
 import { PLATFORM_NAME, PLUGIN_NAME } from "./settings";
 import { HomeConnect, HCAppliance } from "./homeConnect";
-import { beginOvenAccessory } from "./ovenAccessory";
+import { beginOvenAccessory, OvenControl } from "./ovenAccessory";
 
 export let platform: HomeConnectPlatform;
 
@@ -46,12 +46,34 @@ export class HomeConnectPlatform implements DynamicPlatformPlugin {
       return;
     }
 
+    this.log.info(`All appliances: ${appliances.map(a => `${a.name} (type=${a.type})`).join(", ") || "none"}`);
     const ovens = appliances.filter(a => a.type === "Oven");
     this.log.info(`Found ${ovens.length} oven(s)`);
 
+    const ovenControls: OvenControl[] = [];
     for (const oven of ovens) {
-      this.log.info(`Setting up oven: ${oven.name} (${oven.haId})`);
-      beginOvenAccessory(this.getAccessory(oven.name, oven.haId), oven);
+      this.log.info(`Setting up oven: ${oven.name} (${oven.haId}) connected=${oven.connected}`);
+      ovenControls.push(beginOvenAccessory(
+        this.getAccessory(oven.name, oven.haId),
+        this.getAccessory(`${oven.name} Mode`, `${oven.haId}-mode`),
+        oven,
+      ));
+    }
+
+    if (ovenControls.length > 0) {
+      const { Characteristic, Service } = this.api.hap;
+      const masterAccessory = this.getAccessory("Oven", "oven-master");
+      const switchService = masterAccessory.getService(Service.Switch)
+        ?? masterAccessory.addService(Service.Switch, "Oven");
+      switchService.getCharacteristic(Characteristic.On)
+        .onGet(() => ovenControls.some(o => o.isActive))
+        .onSet(async (value) => {
+          if (value) {
+            switchService.updateCharacteristic(Characteristic.On, ovenControls.some(o => o.isActive));
+            return;
+          }
+          await Promise.all(ovenControls.map(o => o.stop()));
+        });
     }
   }
 
